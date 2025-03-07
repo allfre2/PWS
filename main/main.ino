@@ -19,30 +19,39 @@
 #define HUMIDITY_SENSOR_2_PIN A2
 #define HUMIDITY_SENSOR_3_PIN A3
 
+#define HUMIDITY_SENSOR_MIN 590 // Dry
+#define HUMIDITY_SENSOR_MAX 273 // Inside Water
+
 #define PUMP_DEFAULT_ML_PER_MIN 2500
 
 #define PLANT_NUMBER 3
 
+#define PLANT_MAX_VOLUME 5400
+#define PLANT_MIN_VOLUME 300
+#define VOLUME_INCREASE_STEP PLANT_MIN_VOLUME
+
+bool RunMode = false;
+
 struct Plant {
   char Name[10];
-  double Volume; // Cubic Centimeters
-  double RequiredMiliLiters; // Per Unit of volume
-  double RequiredHumidity;
+  double CC; // Cubic Centimeters
+  double RequiredHumidity; // Percentage
 };
 
 struct Pump {
   byte Pin;
-  double MiliLiters; // Per unit of time (Minutes)
+  double CC; // Per unit of time (Minutes)
 };
 
 struct HumiditySensor {
   byte Pin;
+  int LastValue;
 };
 
 struct Channel {
   Pump * Pump;
   Plant * Plant;
-  HumiditySensor HumiditySensor;
+  HumiditySensor * HumiditySensor;
 };
 
 Pump Pumps[PLANT_NUMBER];
@@ -51,6 +60,28 @@ HumiditySensor HumiditySensors[PLANT_NUMBER];
 Channel Channels[PLANT_NUMBER];
 
 LiquidCrystal_I2C LCD(0x27,16,2);
+
+void Join(char * str1, char * str2, char * dest, int length) {
+    strcpy(dest, str1);
+    strncat(dest, str2, length);
+}
+
+double GetHumidityPercentage(HumiditySensor * sensor) {
+  int range = HUMIDITY_SENSOR_MIN - HUMIDITY_SENSOR_MAX;
+  int value = range - (sensor -> LastValue);
+  double percent = (value/range);
+  return percent;
+}
+
+void ReadHumidity(Channel * channel) {
+  HumiditySensor * sensor = channel -> HumiditySensor;
+  sensor -> LastValue = analogRead(sensor -> Pin);
+  delay(200);
+}
+
+bool PlantIsOk(Channel * channel) {
+  return false; // TODO
+}
 
 void SetupPumps() {
   
@@ -68,36 +99,32 @@ void SetupPumps() {
     PUMP_3_PIN,
     PUMP_DEFAULT_ML_PER_MIN
   };
-
 }
 
 void SetupPlants() {
 
   Plants[0] = (struct Plant) {
     "Cactus",
-    100,
-    1000,
-    0.4
+    PLANT_MIN_VOLUME,
+    0.23
   };
 
   Plants[1] = (struct Plant) {
     "Orquidea",
-    100,
-    1000,
-    0.7
+    PLANT_MIN_VOLUME,
+    0.50
   };
 
   Plants[2] = (struct Plant) {
     "Gardenia",
-    100,
-    1000,
-    0.85
+    PLANT_MIN_VOLUME,
+    0.64
   };
-
 }
 
 char * InitMessage = "P.W.S";
 char * PumpNumberMessage = "Bomba ";
+char * VolumeMessage = "V: ";
 char * RunningMessage = "Ejecutando ...";
 char * EmptyLine = "                ";
 
@@ -106,6 +133,27 @@ int CenterMessage(char * msg, uint8_t line) {
   uint8_t padding = (16 - len) / 2;
   LCD.setCursor(padding, line);
   LCD.print(msg);
+}
+
+void DisplayPump(int channel, uint8_t line) {
+    char pump[10];
+
+    // strcpy(pump, PumpNumberMessage);
+    char number = (channel+1)+'0';
+    // strncat(pump, &number, 1);
+  
+    Join(PumpNumberMessage, &number, pump, 1);
+
+    CenterMessage(pump, line);
+}
+
+void DisplayVolume(int volume, uint8_t line) {
+  char volumeString[8];
+  sprintf(volumeString, "%d", volume);
+  char volumeMsg[12];
+  Join(VolumeMessage, volumeString, volumeMsg, strlen(volumeString));
+  ClearLine(line);
+  CenterMessage(volumeMsg, line);
 }
 
 void ClearLine(uint8_t line) {
@@ -133,32 +181,38 @@ void SetupLEDs() {
 }
 
 void SetupSensors() {
+  Serial.begin(9600);
   
   HumiditySensors[0] = (struct HumiditySensor) {
-    HUMIDITY_SENSOR_1_PIN
+    HUMIDITY_SENSOR_1_PIN,
+    0
   };
   
   HumiditySensors[1] = (struct HumiditySensor) {
-    HUMIDITY_SENSOR_2_PIN
+    HUMIDITY_SENSOR_2_PIN,
+    0
   };
   
   HumiditySensors[2] = (struct HumiditySensor) {
-    HUMIDITY_SENSOR_3_PIN
+    HUMIDITY_SENSOR_3_PIN,
+    0
   };
-
 }
 
 void SetDefaultConfiguration() {
+  
   Channels[0] = (struct Channel) {
     &(Pumps[0]),
     &(Plants[0]),
     &(HumiditySensors[0])
   };
+  
   Channels[1] = (struct Channel) {
     &(Pumps[1]),
     &(Plants[1]),
     &(HumiditySensors[1])
   };
+  
   Channels[2] = (struct Channel) {
     &(Pumps[2]),
     &(Plants[2]),
@@ -175,7 +229,7 @@ void SetConfigMode() {
   digitalWrite(START_LED_PIN, LOW);
   digitalWrite(SELECT_LED_PIN, HIGH);
   digitalWrite(STOP_LED_PIN, LOW);
-
+  RunMode = false;
 }
 
 void Configure() {
@@ -185,12 +239,7 @@ void Configure() {
   while (channel < PLANT_NUMBER) {
     LCD.clear();  
 
-    char pump[10];
-    strcpy(pump, PumpNumberMessage);
-    char number = (channel+1)+'0';
-    strncat(pump, &number, 1);
-  
-    CenterMessage(pump, 0);
+    DisplayPump(channel, 0);
   
     delay(500);
   
@@ -210,6 +259,27 @@ void Configure() {
         if (digitalRead(SELECT_BUTTON_PIN) == HIGH) {
           Channels[channel].Plant = & (Plants[plant]);
           plantSelected = true;
+
+          int selectedVolume = Channels[channel].Plant -> CC;
+          
+          delay(500);
+
+          DisplayVolume(selectedVolume, 1);
+          
+          while(true) {
+
+            if (digitalRead(SELECT_BUTTON_PIN) == HIGH) {
+              Channels[channel].Plant -> CC = selectedVolume;
+              break;
+            }
+
+            if (digitalRead(STOP_BUTTON_PIN) == HIGH) {
+              selectedVolume = ((selectedVolume + VOLUME_INCREASE_STEP) % PLANT_MAX_VOLUME);
+              DisplayVolume(selectedVolume, 1);
+              delay(300);
+            }
+          }
+
           break;
         }
       
@@ -242,12 +312,36 @@ void SetRunMode() {
   digitalWrite(START_LED_PIN, HIGH);
   digitalWrite(SELECT_LED_PIN, LOW);
   digitalWrite(STOP_LED_PIN, LOW);
+  RunMode = true;
 }
 
 void Run() {
   LCD.clear();
   CenterMessage(RunningMessage, 0);
-  delay(5000);
+
+  for (int channel = 0; channel < PLANT_NUMBER; ++channel) {
+
+    if (digitalRead(STOP_BUTTON_PIN) == HIGH) {
+      RunMode = false;
+      break;
+    }
+    
+    //ReadHumidity(&(Channels[channel]));
+
+    if (!PlantIsOk(&(Channels[channel]))) {
+      // Pump Water
+      ClearLine(1);
+
+      DisplayPump(channel, 1);
+
+      delay(3000);
+
+      ClearLine(1);
+    }
+
+    delay(700);
+  }
+
   LCD.clear();
   CenterMessage(InitMessage, 0);
 }
@@ -256,6 +350,7 @@ void SetStopMode() {
   digitalWrite(START_LED_PIN, LOW);
   digitalWrite(SELECT_LED_PIN, LOW);
   digitalWrite(STOP_LED_PIN, HIGH);
+  RunMode = false;
 }
 
 void setup() {
@@ -268,7 +363,9 @@ void setup() {
 }
 
 void loop() {
-  SetStopMode();
+  if (!RunMode) {
+    SetStopMode();
+  }
 
   delay(500);
   
@@ -277,7 +374,7 @@ void loop() {
     Configure();
   }
 
-  if (digitalRead(START_BUTTON_PIN) == HIGH) {
+  if (RunMode || digitalRead(START_BUTTON_PIN) == HIGH) {
     SetRunMode();
     Run();
   }
