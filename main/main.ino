@@ -34,13 +34,13 @@ bool RunMode = false;
 
 struct Plant {
   char Name[10];
-  double CC; // Cubic Centimeters
   double RequiredHumidity; // Percentage
 };
 
 struct Pump {
   byte Pin;
-  double CC; // Per unit of time (Minutes)
+  int CC;
+  double CCPerMinute; // Per unit of time (Minutes)
 };
 
 struct HumiditySensor {
@@ -87,16 +87,19 @@ void SetupPumps() {
   
   Pumps[0] = (struct Pump) {
     PUMP_1_PIN,
+    PLANT_MIN_VOLUME,
     PUMP_DEFAULT_ML_PER_MIN
   };
 
   Pumps[1] = (struct Pump) {
     PUMP_2_PIN,
+    PLANT_MIN_VOLUME,
     PUMP_DEFAULT_ML_PER_MIN
   };
 
   Pumps[2] = (struct Pump) {
     PUMP_3_PIN,
+    PLANT_MIN_VOLUME,
     PUMP_DEFAULT_ML_PER_MIN
   };
 }
@@ -105,19 +108,16 @@ void SetupPlants() {
 
   Plants[0] = (struct Plant) {
     "Cactus",
-    PLANT_MIN_VOLUME,
     0.23
   };
 
   Plants[1] = (struct Plant) {
     "Orquidea",
-    PLANT_MIN_VOLUME,
     0.50
   };
 
   Plants[2] = (struct Plant) {
     "Gardenia",
-    PLANT_MIN_VOLUME,
     0.64
   };
 }
@@ -257,10 +257,11 @@ void Configure() {
       while (true) {
       
         if (digitalRead(SELECT_BUTTON_PIN) == HIGH) {
-          Channels[channel].Plant = & (Plants[plant]);
+          Channels[channel].Plant = & (Plants[plant]); // Bug ...
+          // Consider when there are more than one plant of a given type
           plantSelected = true;
 
-          int selectedVolume = Channels[channel].Plant -> CC;
+          int selectedVolume = Channels[channel].Pump -> CC;
           
           delay(500);
 
@@ -269,7 +270,7 @@ void Configure() {
           while(true) {
 
             if (digitalRead(SELECT_BUTTON_PIN) == HIGH) {
-              Channels[channel].Plant -> CC = selectedVolume;
+              Channels[channel].Pump -> CC = selectedVolume;
               break;
             }
 
