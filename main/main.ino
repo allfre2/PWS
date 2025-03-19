@@ -222,7 +222,7 @@ void SetupSensors() {
   };
 }
 
-void SetDefaultConfiguration() {
+void SetupChannels() {
   
   Channels[0] = (struct Channel) {
     &(Pumps[0]),
@@ -381,7 +381,7 @@ void setup() {
   Serial.begin(9600);
   SetupPumps();
   SetupPlants();
-  SetDefaultConfiguration();
+  SetupChannels();
   SetupButtons();
   SetupLEDs();
   SetupLCDScreen();
