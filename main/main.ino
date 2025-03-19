@@ -39,7 +39,7 @@ struct Plant {
 
 struct Pump {
   byte Pin;
-  int CC;
+  double Limit;
   double CCPerMinute; // Per unit of time (Minutes)
 };
 
@@ -64,6 +64,33 @@ LiquidCrystal_I2C LCD(0x27,16,2);
 void Join(char * str1, char * str2, char * dest, int length) {
     strcpy(dest, str1);
     strncat(dest, str2, length);
+}
+
+void Debug(char * str) {
+  Serial.print(str);
+}
+
+void DebugConfiguration() {
+  for (int i = 0; i < PLANT_NUMBER; ++i) {
+    char number = (i+1)+'0';
+
+    Debug("> Canal ");
+    Debug(&number);
+    Debug("\n");
+    Debug(Channels[i].Plant -> Name);
+    Debug("\n");
+    Debug("Required Humidity: ");
+    char humidity[10];
+    dtostrf(Channels[i].Plant -> RequiredHumidity, 3, 2, humidity);
+    Debug(humidity);
+    Debug("\n");
+    Debug("Limit (cc): ");
+    char limit[10];
+    dtostrf(Channels[i].Pump -> Limit, 1, 1, limit);
+    Debug(limit);
+
+    Debug("\n\n");
+  }
 }
 
 double GetHumidityPercentage(HumiditySensor * sensor) {
@@ -138,9 +165,7 @@ int CenterMessage(char * msg, uint8_t line) {
 void DisplayPump(int channel, uint8_t line) {
     char pump[10];
 
-    // strcpy(pump, PumpNumberMessage);
     char number = (channel+1)+'0';
-    // strncat(pump, &number, 1);
   
     Join(PumpNumberMessage, &number, pump, 1);
 
@@ -181,8 +206,6 @@ void SetupLEDs() {
 }
 
 void SetupSensors() {
-  Serial.begin(9600);
-  
   HumiditySensors[0] = (struct HumiditySensor) {
     HUMIDITY_SENSOR_1_PIN,
     0
@@ -257,11 +280,10 @@ void Configure() {
       while (true) {
       
         if (digitalRead(SELECT_BUTTON_PIN) == HIGH) {
-          Channels[channel].Plant = & (Plants[plant]); // Bug ...
-          // Consider when there are more than one plant of a given type
+          Channels[channel].Plant = & (Plants[plant]);
           plantSelected = true;
 
-          int selectedVolume = Channels[channel].Pump -> CC;
+          int selectedVolume = Channels[channel].Pump -> Limit;
           
           delay(500);
 
@@ -270,7 +292,7 @@ void Configure() {
           while(true) {
 
             if (digitalRead(SELECT_BUTTON_PIN) == HIGH) {
-              Channels[channel].Pump -> CC = selectedVolume;
+              Channels[channel].Pump -> Limit = selectedVolume;
               break;
             }
 
@@ -307,6 +329,7 @@ void Configure() {
   delay(500);
   LCD.clear();
   CenterMessage(InitMessage, 0);
+  DebugConfiguration();
 }
 
 void SetRunMode() {
@@ -355,8 +378,10 @@ void SetStopMode() {
 }
 
 void setup() {
+  Serial.begin(9600);
   SetupPumps();
   SetupPlants();
+  SetDefaultConfiguration();
   SetupButtons();
   SetupLEDs();
   SetupLCDScreen();
