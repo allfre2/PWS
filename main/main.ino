@@ -19,11 +19,14 @@
 #define HUMIDITY_SENSOR_2_PIN A2
 #define HUMIDITY_SENSOR_3_PIN A3
 
-#define HUMIDITY_SENSOR_MIN 590 // Dry
-#define HUMIDITY_SENSOR_MAX 273 // Inside Water
+#define HUMIDITY_SENSOR_MIN 491 // Dry
+#define HUMIDITY_SENSOR_MAX 229 // Inside Water
+
+#define TEMPERATURE_SENSOR_PIN A6
 
 #define PUMP_DEFAULT_ML_PER_MIN 2500
 
+#define CHANNEL_NUMBER 3
 #define PLANT_NUMBER 3
 
 #define PLANT_MAX_VOLUME 5400
@@ -71,7 +74,7 @@ void Debug(char * str) {
 }
 
 void DebugConfiguration() {
-  for (int i = 0; i < PLANT_NUMBER; ++i) {
+  for (int i = 0; i < CHANNEL_NUMBER; ++i) {
     char number = (i+1)+'0';
 
     Debug("> Canal ");
@@ -103,6 +106,7 @@ double GetHumidityPercentage(HumiditySensor * sensor) {
 void ReadHumidity(Channel * channel) {
   HumiditySensor * sensor = channel -> HumiditySensor;
   sensor -> LastValue = analogRead(sensor -> Pin);
+
   delay(200);
 }
 
@@ -220,6 +224,10 @@ void SetupSensors() {
     HUMIDITY_SENSOR_3_PIN,
     0
   };
+
+  for (int i = 0; i < CHANNEL_NUMBER; ++i) {
+    pinMode(HumiditySensors[i].Pin, INPUT);
+  }
 }
 
 void SetupChannels() {
@@ -259,7 +267,7 @@ void Configure() {
 
   int channel = 0;
 
-  while (channel < PLANT_NUMBER) {
+  while (channel < CHANNEL_NUMBER) {
     LCD.clear();  
 
     DisplayPump(channel, 0);
@@ -313,7 +321,7 @@ void Configure() {
       
         if (digitalRead(START_BUTTON_PIN) == HIGH) {
           plantSelected = true;
-          channel = PLANT_NUMBER;
+          channel = CHANNEL_NUMBER;
           break;
         }
       }
@@ -343,14 +351,25 @@ void Run() {
   LCD.clear();
   CenterMessage(RunningMessage, 0);
 
-  for (int channel = 0; channel < PLANT_NUMBER; ++channel) {
+  for (int channel = 0; channel < CHANNEL_NUMBER; ++channel) {
 
     if (digitalRead(STOP_BUTTON_PIN) == HIGH) {
       RunMode = false;
       break;
     }
     
-    //ReadHumidity(&(Channels[channel]));
+    Debug("\n");
+    Debug("> Reading humidity for channel ");
+    char channelNumber[8];
+    sprintf(channelNumber, "%d", channel+1);
+    Debug(channelNumber);
+    Debug(": ");
+
+    ReadHumidity(&(Channels[channel]));
+
+    char reading[10];
+    sprintf(reading, "%d", Channels[channel].HumiditySensor -> LastValue);
+    Debug(reading);
 
     if (!PlantIsOk(&(Channels[channel]))) {
       // Pump Water
