@@ -1,5 +1,4 @@
 #include <LiquidCrystal_I2C.h>
-#include <dht.h>
 
 #define PUMP_1_PIN 12
 #define PUMP_2_PIN 11
@@ -23,8 +22,7 @@
 #define HUMIDITY_SENSOR_MIN 520 // Dry
 #define HUMIDITY_SENSOR_MAX 200 // Inside Water
 
-#define TEMPERATURE_SENSOR_PIN 8
-#define TEMPERATURE_SENSOR_TYPE DHT11
+#define TEMPERATURE_SENSOR_PIN A7
 
 #define PUMP_DEFAULT_ML_PER_MIN 2500
 #define MILLISECONDS_PER_MINUTE 60000
@@ -41,7 +39,6 @@ bool RunMode = false;
 struct Plant {
   char Name[10];
   double RequiredHumidity; // Percentage
-  float IdealTemperature; // Celcius
 };
 
 struct Pump {
@@ -56,8 +53,10 @@ struct HumiditySensor {
   double Humidity;
 };
 
-dht TempSensor;
-float currentTemp;
+struct TemperatureSensor {
+  byte Pin;
+  int LastValue;
+};
 
 struct Channel {
   Pump * Pump;
@@ -143,19 +142,6 @@ void ReadHumidity(Channel * channel, int number) {
   delay(200);
 }
 
-void ReadTemperature() {
-  int _ = TempSensor.read11(TEMPERATURE_SENSOR_PIN);
-
-  currentTemp = TempSensor.temperature;
-
-  char tempReading[10];
-
-  dtostrf(currentTemp, 3, 2, tempReading);
-
-  Debug("\n Temperature: ");
-  Debug(tempReading);
-}
-
 bool PlantIsOk(Channel * channel) {
   // TODO: Take into account temperature ?
   if (channel -> HumiditySensor -> Humidity < channel -> Plant -> RequiredHumidity) {
@@ -170,15 +156,7 @@ void PumpWater(Channel * channel) {
   HumiditySensor * humiditySensor = channel -> HumiditySensor;
   Pump * pump = channel -> Pump;
 
-  double volumePercentage = 0.50;
-
-  if (currentTemp > plant -> IdealTemperature) {
-    volumePercentage = 0.55;
-  } else if (currentTemp < plant -> IdealTemperature) {
-    volumePercentage = 0.45;
-  }
-
-  double overflowLimit = volumePercentage * channel -> Pump -> Limit;
+  double overflowLimit = 0.50 * channel -> Pump -> Limit;
   double percentageMissing = (channel -> Plant -> RequiredHumidity) - (channel -> HumiditySensor -> Humidity);
 
   double CCs = percentageMissing * overflowLimit;
@@ -228,20 +206,17 @@ void SetupPlants() {
 
   Plants[0] = (struct Plant) {
     "Cactus",
-    0.23,
-    30.0
+    0.23
   };
 
   Plants[1] = (struct Plant) {
     "Orquidea",
-    0.50,
-    23.0
+    0.50
   };
 
   Plants[2] = (struct Plant) {
     "Gardenia",
-    0.64,
-    19.0
+    0.64
   };
 }
 
@@ -445,8 +420,6 @@ void SetRunMode() {
 void Run() {
   LCD.clear();
   CenterMessage(RunningMessage, 0);
-
-  ReadTemperature();
 
   for (int channel = 0; channel < CHANNEL_NUMBER; ++channel) {
 
