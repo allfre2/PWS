@@ -97,8 +97,8 @@ void DebugConfiguration() {
 }
 
 double GetHumidityPercentage(HumiditySensor * sensor) {
-  int range = HUMIDITY_SENSOR_MIN - HUMIDITY_SENSOR_MAX;
-  int value = range - (sensor -> LastValue);
+  double range = HUMIDITY_SENSOR_MIN - HUMIDITY_SENSOR_MAX;
+  double value = HUMIDITY_SENSOR_MIN - (sensor -> LastValue);
   double percent = (value/range);
   return percent;
 }
@@ -359,7 +359,7 @@ void Run() {
     }
     
     Debug("\n");
-    Debug("> Reading humidity for channel ");
+    Debug("> Humidity for channel ");
     char channelNumber[8];
     sprintf(channelNumber, "%d", channel+1);
     Debug(channelNumber);
@@ -370,6 +370,13 @@ void Run() {
     char reading[10];
     sprintf(reading, "%d", Channels[channel].HumiditySensor -> LastValue);
     Debug(reading);
+
+    double percentage = GetHumidityPercentage(Channels[channel].HumiditySensor);
+
+    char percentReading[10];
+    dtostrf(percentage, 1, 2, percentReading);
+    Debug(", ");
+    Debug(percentReading);
 
     if (!PlantIsOk(&(Channels[channel]))) {
       // Pump Water
